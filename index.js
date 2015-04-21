@@ -5,9 +5,9 @@ var xtend = require('xtend');
 var Promise = require('native-or-bluebird');
 
 var Container = require('./container');
+var Image = require('./image');
 
 var dockerRegistry = 'https://index.docker.io/v1';
-
 
 /**
  * Create a new instance of Nodöcker
@@ -20,6 +20,7 @@ var dockerRegistry = 'https://index.docker.io/v1';
  * @param {string} auth.email your email address
  */
 function Nodoecker(host, auth){
+  auth = auth || {};
   this.dkr = dr({host: host});
   this.authStr = this._makeAuth(auth);
 }
@@ -120,22 +121,23 @@ Nodoecker.prototype.run = function(details, name) {
 };
 
 /**
- * List all containers in docker instance
+ * List all images in docker instance
  * @method ps
  * @memberOf Nodoedocker
  * @promise
  * @param {object} params parameters for sorting/filtering
- * @param {boolean} [params.all=false] true = show all containers, false = show only running
- * @param {string} [params.limit] show only x number of last created containers, including non-running
- * @param {string} [params.since] show only containers created since container id
- * @param {string} [params.before] show only containers created before container id
+ * @param {boolean} [params.all=false] true = show all images, false = show only running
+ * @param {string} [params.limit] show only x number of last created images, including non-running
+ * @param {string} [params.since] show only images created since container id
+ * @param {string} [params.before] show only images created before container id
  * @param {boolean} [params.size=false] show the container sizes
  * @param {object} [params.filters] a set of filters to apply to the response
- * @param {integer} [params.filters.exited] list containers with the specified exit code
- * @param {string} [params.filters.status] list containers with status: restarting, running, paused, exiting
+ * @param {integer} [params.filters.exited] list images with the specified exit code
+ * @param {string} [params.filters.status] list images with status: restarting, running, paused, exiting
  * @returns {container[]} an array of container objects when the promise fulfills
  */
-Nodoecker.prototype.ps = function(params) {
+Nodoecker.prototype.images = function(params) {
+  var self = this;
   params = params || {};
 
   if (params.filters) {
@@ -148,15 +150,15 @@ Nodoecker.prototype.ps = function(params) {
   };
 
   var prms = new Promise(function(resolve, reject){
-    this.dkr.get('/images/json', opts, function(err, response) {
+    self.dkr.get('/images/json', opts, function(err, response) {
       if(err) {
         return reject(err);
       }
-      var containers = response.map(function(container){
-        return new Container(container);
+      var images = response.map(function(container){
+        return new Image(container, self.dkr);
       });
 
-      resolve(containers);
+      resolve(images);
     });
   });
 
