@@ -1,5 +1,7 @@
 'use strict';
 
+var querystring = require('querystring');
+
 var dr = require('docker-remote-api');
 var xtend = require('xtend');
 var Promise = require('native-or-bluebird');
@@ -21,7 +23,7 @@ var dockerRegistry = 'https://index.docker.io/v1';
  */
 function Nodoecker(host, auth){
   auth = auth || {};
-  this.dkr = dr({host: host});
+  this.dkr = Promise.promisifyAll(dr({host: host}));
   this.authStr = this._makeAuth(auth);
 }
 
@@ -53,6 +55,7 @@ Nodoecker.prototype._makeAuth = function(auth){
  * @returns {container} the container will be returned to the promise
  */
 Nodoecker.prototype.run = function(details, name) {
+  var self = this;
   return new Promise(function(resolve, reject) {
     if (!/^\/?[a-zA-Z0-9_-]+/.test(name)) {
       throw new Error('Name can only consist of characters a-z, A-Z, 0-9, _ and -');
@@ -108,11 +111,10 @@ Nodoecker.prototype.run = function(details, name) {
       json: true
     };
 
-    var req = this.dkr.post('/containers/create', opts, function(err, resp){
+    var req = self.dkr.post('/containers/create', opts, function(err, resp) {
       if (err) {
-        reject(err);
+        return reject(err);
       }
-
       resolve(new Container(xtend(resp, details)));
     });
 
@@ -136,8 +138,7 @@ Nodoecker.prototype.run = function(details, name) {
  * @param {string} [params.filters.status] list images with status: restarting, running, paused, exiting
  * @returns {container[]} an array of container objects when the promise fulfills
  */
-Nodoecker.prototype.images = function(params) {
-  var self = this;
+Nodoecker.prototype.images = Promise.method(function(params) {
   params = params || {};
 
   if (params.filters) {
@@ -149,20 +150,64 @@ Nodoecker.prototype.images = function(params) {
     json: true
   };
 
-  var prms = new Promise(function(resolve, reject){
-    self.dkr.get('/images/json', opts, function(err, response) {
-      if(err) {
+  this.dkr.getAsync('/images/json', opts)
+    .bind(this)
+    .then(function(response) {
+      var images = response.map(function(container){
+        return new Image(container, this.dkr);
+      });
+      return images;
+  });
+});
+
+/**
+ * Returns an instance of an Image.
+ * @param  {string} name Name or ID of image
+ * @param  {object} opts options
+ * @param  {boolean} [opts.delay] Set to `true` if you want to load the data about the image at a later time
+ * @return {object} Image
+ */
+Nodoecker.prototype.image = function(name, opts) {
+  opts = opts || {};
+  opts.docker = this.dkr;
+  return new Image(name, opts);
+};
+
+/**
+ * Pulls an image from the registry
+ * @param {string} imageName name of
+ * @param {object} opts      parameters for request
+ * @param {string} [opts.fromSrc]   URL to the source to import
+ * @param {string} [opts.repo] repository to pull from
+ * @param {string} [opts.tag] what tag to pull
+ * @param {string} [opts.registry] which registry to use
+ * @param {boolean|string} [opts.auth] should we end the auth string. defaults to the auth string created when instantiating the client, otherwise one can be provided here
+ * @return {Promise} resolve -> image, reject -> err
+ */
+Nodoecker.prototype.pull = function(imageName, opts) {
+  var self = this;
+  return new Promise(function(reject, resolve) {
+    var params = {
+      body: null,
+      json: true
+    };
+
+    if (opts.auth) {
+      params.headers = {
+        'X-Registry-Auth': self.authStr || opts.auth
+      };
+      delete opts.auth;
+    }
+    opts.fromImage = imageName;
+    var qs = querystring.stringify(opts);
+
+    this.dkr.post('/images/create?' + qs, params, function(err) {
+      if (err) {
         return reject(err);
       }
-      var images = response.map(function(container){
-        return new Image(container, self.dkr);
-      });
-
-      resolve(images);
+      resolve(new Image(imageName));
     });
   });
-
-  return prms;
 };
 
 module.exports = Nodoecker;

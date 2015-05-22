@@ -18,17 +18,16 @@
     "boot2docker"
   ],
   "author": "Todd Kennedy <todd@selfassembled.org>",
-  "license": "Apache 2",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/scriptollc/nodoecker/issues"
   },
   "homepage": "https://github.com/scriptollc/nodoecker",
   "dependencies": {
-    "bluebird": "~2.9.24",
+    "bluebird": "~2.9.25",
     "byte-size": "~0.1.0",
     "docker-remote-api": "~4.4.1",
-    "es6-promise": "~2.0.1",
-    "native-or-bluebird": "~1.2.0",
+    "lodash.isobject": "~3.0.2",
     "xtend": "~4.0.0"
   }
 }

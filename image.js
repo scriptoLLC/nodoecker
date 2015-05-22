@@ -1,21 +1,15 @@
 'use strict';
 
 var bs = require('byte-size');
-var Promise = require('native-or-bluebird');
+var Promise = require('bluebird');
 
-function Image(container, dkr, inspect) {
-  this._size = container.Size;
-  this._virtualSize = container.VirtualSize;
-  this._created = new Date(container.Created);
-  this.id = container.Id;
-  this.parentId = container.ParentId;
-  this.repoTags = container.RepoTags;
-  this.dkr = dkr;
+function Image(name, opts) {
+  this.reference = name;
+  this.dkr = opts.dkr;
   this.history = [];
-
-  if (inspect) {
-    this.ready = this.inspect();
-  }
+  this._size = 0;
+  this._virtualSize = 0;
+  this._created = new Date();
 
   Object.defineProperty(this, 'size', {
     get: function(humanize) {
@@ -43,51 +37,44 @@ function Image(container, dkr, inspect) {
       return this._created;
     }
   });
+
+  if (!opts.delay) {
+    this.ready = this.inspect();
+    return;
+  }
+
+  this.ready = Promise.resolve();
 }
 
-Image.prototype.history = function() {
-  var self = this;
-  return new Promise(function(reject, resolve) {
-    var url = '/images/' + self.id + '/history';
-
-    self.dkr.get(url, function(err, history) {
-      if (err) {
-        reject(err);
-      }
-
-      self.history = history;
-      resolve(history);
+Image.prototype.history = Promise.method(function() {
+  var url = '/images/' + self.id + '/history';
+  this.dkr.getAsync(url, {json: true})
+    .bind(this)
+    .then(function(history){
+      this.history = history;
+      return this;
     });
-  });
-};
+});
 
-Image.prototype.inspect = function() {
-  var self = this;
-  return new Promise(function(reject, resolve) {
-    var url = '/images/' + self.id + '/json';
-
-    self.dkr.get(url, function(err, info) {
-      if (err) {
-        reject(err);
-      }
-
-      if (!self._created) {
-        self._created = new Date(info.Created);
-      }
-
-      if (!self._size) {
-        self._size = info.Size;
-      }
-
-      if (!self.parentId) {
-        self.parentId = info.Parent;
-      }
-
-      self.config = info.ContainerConfig;
-      resolve(info.ContainerConfig);
+Image.prototype.inspect = Promise.method(function() {
+  var url = '/images/' + this.reference + '/json';
+  this.dkr.getAsync(url, {json: true})
+    .bind(this)
+    .then(function(info) {
+      this._size = info.Size;
+      this._virtualSize = info.VirtualSize;
+      this._created = new Date(info.Created);
+      this.id = info.Id;
+      this.parentId = info.ParentId;
+      this.repoTags = info.RepoTags;
+      this.container = info.Container;
+      this.containerConfig = info.ContainerConfig;
+      this.os = info.Os;
+      this.dockerVersion = info.DockerVersion;
+      this.config = info.Config;
+      return this;
     });
-  });
-};
+});
 
 Image.prototype.tag = function() {
 
