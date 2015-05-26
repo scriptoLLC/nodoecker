@@ -26,8 +26,9 @@
   "dependencies": {
     "bluebird": "~2.9.25",
     "byte-size": "~0.1.0",
+    "debug": "~2.2.0",
     "docker-remote-api": "~4.4.1",
-    "lodash.isobject": "~3.0.2",
+    "native-or-bluebird": "~1.2.0",
     "xtend": "~4.0.0"
   }
 }

@@ -1,83 +1,109 @@
 'use strict';
 
 var bs = require('byte-size');
-var Promise = require('bluebird');
+var Promise = require('native-or-bluebird');
+var Dr = require('docker-remote-api');
+var debug = require('debug')('nodoecker');
 
 function Image(name, opts) {
-  this.reference = name;
-  this.dkr = opts.dkr;
+  if (opts.tag) {
+    name = [name, opts.tag].join(':');
+  }
+
+  this.reference = name
+  this.host = opts.host;
+  this.authStr = opts.authStr;
+  this.dkr = new Dr({host: this.host});
   this.history = [];
   this._size = 0;
   this._virtualSize = 0;
   this._created = new Date();
+  var self = this;
 
   Object.defineProperty(this, 'size', {
-    get: function(humanize) {
-      if (humanize) {
-        return bs(this._size);
-      }
-      return this._size;
+    get: function() {
+      return bs(this._size);
+    },
+    set: function(size) {
+      this._size = size;
     }
   });
 
   Object.defineProperty(this, 'virtualSize', {
-    get: function(humanize) {
-      if (humanize) {
-        return bs(this._virtualSize);
-      }
-      return this._virtualSize;
+    get: function() {
+      return bs(this._virtualSize);
+    },
+    set: function(size) {
+      this._virtualSize = size;
     }
   });
 
   Object.defineProperty(this, 'created', {
-    get: function(humanize) {
-      if (humanize) {
-        return this._created.toISOString();
-      }
-      return this._created;
+    get: function() {
+      return this._created.toISOString();
+    },
+    set: function(date) {
+      this._created = new Date(date);
     }
   });
-
-  if (!opts.delay) {
-    this.ready = this.inspect();
-    return;
-  }
-
-  this.ready = Promise.resolve();
 }
 
-Image.prototype.history = Promise.method(function() {
-  var url = '/images/' + self.id + '/history';
-  this.dkr.getAsync(url, {json: true})
-    .bind(this)
-    .then(function(history){
-      this.history = history;
-      return this;
+Image.prototype.history = function() {
+  var self = this;
+  return new Promise(function(resolve, reject) {
+    var url = '/images/' + self.id + '/history';
+    this.dkr.get(url, function(err, stream) {
+      if (err) {
+        return reject(err);
+      }
+
+      var data = [];
+
+      stream
+        .on('data', function(chunk) {
+          data.push(chunk.toString());
+        })
+        .on('end', function() {
+          var history = JSON.parse(data.join(''));
+          self.history = history;
+          resolve(self);
+        });
     });
-});
+  });
+};
 
-Image.prototype.inspect = Promise.method(function() {
-  var url = '/images/' + this.reference + '/json';
-  this.dkr.getAsync(url, {json: true})
-    .bind(this)
-    .then(function(info) {
-      this._size = info.Size;
-      this._virtualSize = info.VirtualSize;
-      this._created = new Date(info.Created);
-      this.id = info.Id;
-      this.parentId = info.ParentId;
-      this.repoTags = info.RepoTags;
-      this.container = info.Container;
-      this.containerConfig = info.ContainerConfig;
-      this.os = info.Os;
-      this.dockerVersion = info.DockerVersion;
-      this.config = info.Config;
-      return this;
+Image.prototype.Inspect = function() {
+  var self = this;
+  return new Promise(function(resolve, reject) {
+    var imgUrl = '/images/' + self.reference + '/json';
+    debug('Creating new image with', imgUrl);
+    self.dkr.get(imgUrl, function(err, stream) {
+      if (err) {
+        debug('Docker returned an error', err);
+        return reject(err);
+      }
+
+      var data = [];
+      stream.on('data', function(chunk) {
+          data.push(chunk.toString());
+        }).on('end', function() {
+          debug('Finished getting image');
+          var info = JSON.parse(data.join(''));
+          self._size = info.Size;
+          self._virtualSize = info.VirtualSize;
+          self._created = new Date(info.Created);
+          self.id = info.Id;
+          self.parentId = info.ParentId;
+          self.repoTags = info.RepoTags;
+          self.container = info.Container;
+          self.containerConfig = info.ContainerConfig;
+          self.os = info.Os;
+          self.dockerVersion = info.DockerVersion;
+          self.config = info.Config;
+          resolve(self);
+        });
     });
-});
-
-Image.prototype.tag = function() {
-
+  });
 };
 
 module.exports = Image;

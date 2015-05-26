@@ -2,9 +2,10 @@
 
 var querystring = require('querystring');
 
-var dr = require('docker-remote-api');
+var Dr = require('docker-remote-api');
 var xtend = require('xtend');
 var Promise = require('native-or-bluebird');
+var debug = require('debug')('nodoecker');
 
 var Container = require('./container');
 var Image = require('./image');
@@ -23,7 +24,9 @@ var dockerRegistry = 'https://index.docker.io/v1';
  */
 function Nodoecker(host, auth){
   auth = auth || {};
-  this.dkr = Promise.promisifyAll(dr({host: host}));
+  this.host = host;
+  this.auth = auth;
+  this.dkr = new Dr({host: this.host});
   this.authStr = this._makeAuth(auth);
 }
 
@@ -138,39 +141,59 @@ Nodoecker.prototype.run = function(details, name) {
  * @param {string} [params.filters.status] list images with status: restarting, running, paused, exiting
  * @returns {container[]} an array of container objects when the promise fulfills
  */
-Nodoecker.prototype.images = Promise.method(function(params) {
-  params = params || {};
+Nodoecker.prototype.images = function(params) {
+  var self = this;
+  return new Promise(function(resolve, reject) {
+    params = params || {};
 
-  if (params.filters) {
-    params.filters = JSON.stringify(params.filters);
-  }
+    if (params.filters) {
+      params.filters = JSON.stringify(params.filters);
+    }
 
-  var opts = {
-    qs: params,
-    json: true
-  };
+    var opts = {
+      qs: params
+    };
 
-  this.dkr.getAsync('/images/json', opts)
-    .bind(this)
-    .then(function(response) {
-      var images = response.map(function(container){
-        return new Image(container, this.dkr);
-      });
-      return images;
+    self.dkr.get('/images/json', opts, function(err, stream) {
+      if (err) {
+        return reject(err);
+      }
+
+      var data = [];
+
+      stream
+        .on('data', function(chunk) {
+          data.push(chunk.toString());
+        })
+        .on('end', function() {
+          var images = JSON.parse(data.join(''));
+          images = images.map(function(container) {
+            return new Image(container, {host: self.host, authStr: self.authStr});
+          });
+
+          resolve(images);
+        });
+    });
   });
-});
+};
 
 /**
  * Returns an instance of an Image.
  * @param  {string} name Name or ID of image
  * @param  {object} opts options
- * @param  {boolean} [opts.delay] Set to `true` if you want to load the data about the image at a later time
- * @return {object} Image
+ * @param  {boolean} [opts.delay] Don't call `img.Inspect()`
+ * @return {object} Promise -> new Image
  */
 Nodoecker.prototype.image = function(name, opts) {
   opts = opts || {};
-  opts.docker = this.dkr;
-  return new Image(name, opts);
+  opts.host = this.host;
+  opts.authStr = this.authStr;
+  var img = new Image(name, opts);
+  if (opts.delay) {
+    return Promise.resolve(img);
+  } else {
+    return img.Inspect();
+  }
 };
 
 /**
@@ -186,10 +209,10 @@ Nodoecker.prototype.image = function(name, opts) {
  */
 Nodoecker.prototype.pull = function(imageName, opts) {
   var self = this;
-  return new Promise(function(reject, resolve) {
+  opts = opts || {};
+  return new Promise(function(resolve, reject) {
     var params = {
-      body: null,
-      json: true
+      body: null
     };
 
     if (opts.auth) {
@@ -198,14 +221,35 @@ Nodoecker.prototype.pull = function(imageName, opts) {
       };
       delete opts.auth;
     }
+
     opts.fromImage = imageName;
     var qs = querystring.stringify(opts);
+    var imgUrl = '/images/create?' + qs;
 
-    this.dkr.post('/images/create?' + qs, params, function(err) {
+    debug('calling docker with', imgUrl, params);
+
+    self.dkr.post(imgUrl, params, function(err, stream) {
       if (err) {
+        debug('Docker returned an error', err);
         return reject(err);
       }
-      resolve(new Image(imageName));
+
+      stream
+        .on('data', function(d){
+          debug(d.toString());
+        })
+        .on('end', function() {
+          debug('Finished pulling image');
+          var imgOpts = {
+            host: self.host,
+            authStr: self.authStr,
+            tag: opts.tag
+          };
+          
+          var img = new Image(imageName, imgOpts);
+
+          resolve(img);
+        });
     });
   });
 };
