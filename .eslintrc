@@ -43,6 +43,7 @@
     "no-width": true,
     "no-extra-strict": true,
     "quotes": "single",
-    "no-underscore-dangle": false
+    "no-underscore-dangle": false,
+    "new-cap": false
   }
 }

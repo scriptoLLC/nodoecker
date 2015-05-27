@@ -1,8 +1,7 @@
 'use strict';
 
 var bs = require('byte-size');
-var Promise = require('native-or-bluebird');
-var Dr = require('docker-remote-api');
+var draap = require('docker-remote-api-as-promised');
 var debug = require('debug')('nodoecker');
 
 function Image(name, opts) {
@@ -10,15 +9,14 @@ function Image(name, opts) {
     name = [name, opts.tag].join(':');
   }
 
-  this.reference = name
+  this.reference = name;
   this.host = opts.host;
   this.authStr = opts.authStr;
-  this.dkr = new Dr({host: this.host});
+  this.dkr = draap(this.host);
   this.history = [];
   this._size = 0;
   this._virtualSize = 0;
   this._created = new Date();
-  var self = this;
 
   Object.defineProperty(this, 'size', {
     get: function() {
@@ -49,61 +47,41 @@ function Image(name, opts) {
 }
 
 Image.prototype.history = function() {
-  var self = this;
-  return new Promise(function(resolve, reject) {
-    var url = '/images/' + self.id + '/history';
-    this.dkr.get(url, function(err, stream) {
-      if (err) {
-        return reject(err);
-      }
-
-      var data = [];
-
-      stream
-        .on('data', function(chunk) {
-          data.push(chunk.toString());
-        })
-        .on('end', function() {
-          var history = JSON.parse(data.join(''));
-          self.history = history;
-          resolve(self);
-        });
-    });
-  });
+    var url = '/images/' + this.id + '/history';
+    return this.dkr.get(url, {json: true})
+      .bind(this)
+      .then(function(history) {
+        this.history = history;
+        return this;
+      })
+      .catch(function(err) {
+        return err;
+      });
 };
 
 Image.prototype.Inspect = function() {
-  var self = this;
-  return new Promise(function(resolve, reject) {
-    var imgUrl = '/images/' + self.reference + '/json';
+    var imgUrl = '/images/' + this.reference + '/json';
     debug('Creating new image with', imgUrl);
-    self.dkr.get(imgUrl, function(err, stream) {
-      if (err) {
-        debug('Docker returned an error', err);
-        return reject(err);
-      }
-
-      var data = [];
-      stream.on('data', function(chunk) {
-          data.push(chunk.toString());
-        }).on('end', function() {
-          debug('Finished getting image');
-          var info = JSON.parse(data.join(''));
-          self._size = info.Size;
-          self._virtualSize = info.VirtualSize;
-          self._created = new Date(info.Created);
-          self.id = info.Id;
-          self.parentId = info.ParentId;
-          self.repoTags = info.RepoTags;
-          self.container = info.Container;
-          self.containerConfig = info.ContainerConfig;
-          self.os = info.Os;
-          self.dockerVersion = info.DockerVersion;
-          self.config = info.Config;
-          resolve(self);
-        });
-    });
-  });
+    return this.dkr.get(imgUrl, {json: true})
+      .bind(this)
+      .then(function(info) {
+        debug('Finished getting image');
+        this.size = info.Size;
+        this.virtualSize = info.VirtualSize;
+        this.created = info.Created;
+        this.id = info.Id;
+        this.parentId = info.ParentId;
+        this.repoTags = info.RepoTags;
+        this.container = info.Container;
+        this.containerConfig = info.ContainerConfig;
+        this.os = info.Os;
+        this.dockerVersion = info.DockerVersion;
+        this.config = info.Config;
+        return this;
+      })
+      .catch(function(err) {
+        return err;
+      });
 };
 
 module.exports = Image;

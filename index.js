@@ -2,10 +2,9 @@
 
 var querystring = require('querystring');
 
-var docker = require('./docker-remote-api-as-promised');
+var draap = require('docker-remote-api-as-promised');
 var xtend = require('xtend');
 var Promise = require('native-or-bluebird');
-var debug = require('debug')('nodoecker');
 
 var Container = require('./container');
 var Image = require('./image');
@@ -26,7 +25,7 @@ function Nodoecker(host, auth){
   auth = auth || {};
   this.host = host;
   this.auth = auth;
-  this.dkr = docker(host);
+  this.dkr = draap(host);
   this.authStr = this._makeAuth(auth);
 }
 
@@ -58,71 +57,70 @@ Nodoecker.prototype._makeAuth = function(auth){
  * @returns {container} the container will be returned to the promise
  */
 Nodoecker.prototype.run = function(details, name) {
-  var self = this;
-  return new Promise(function(resolve, reject) {
-    if (!/^\/?[a-zA-Z0-9_-]+/.test(name)) {
-      throw new Error('Name can only consist of characters a-z, A-Z, 0-9, _ and -');
+  if (!/^\/?[a-zA-Z0-9_-]+/.test(name)) {
+    throw new Error('Name can only consist of characters a-z, A-Z, 0-9, _ and -');
+  }
+
+  var defaultDetails = {
+    Hostname: "",
+    Domainname: "",
+    User: "",
+    Memory: 0,
+    MemorySwap: 0,
+    CpuShares: 512,
+    Cpuset: "0,1",
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false,
+    OpenStdin: false,
+    StdinOnce: false,
+    Env: null,
+    Cmd: [],
+    Entrypoint: "",
+    Image: "",
+    Volumes: {},
+    WorkingDir: "",
+    NetworkDisabled: false,
+    ExposedPorts: {},
+    SecurityOpts: [""],
+    HostConfig: {
+      Binds: [],
+      Links: [],
+      LxcConf: {},
+      PortBindings: {},
+      PublishAllPorts: false,
+      Privileged: false,
+      ReadonlyRootfs: false,
+      Dns: [],
+      DnsSearch: [""],
+      ExtraHosts: null,
+      VolumesFrom: [],
+      CapAdd: [],
+      Capdrop: [],
+      RestartPolicy: {"Name": "", "MaximumRetryCount": 0},
+      NetworkMode: "bridge",
+      Devices: []
     }
+  };
 
-    var defaultDetails = {
-      Hostname: "",
-      Domainname: "",
-      User: "",
-      Memory: 0,
-      MemorySwap: 0,
-      CpuShares: 512,
-      Cpuset: "0,1",
-      AttachStdin: true,
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: false,
-      OpenStdin: false,
-      StdinOnce: false,
-      Env: null,
-      Cmd: [],
-      Entrypoint: "",
-      Image: "",
-      Volumes: {},
-      WorkingDir: "",
-      NetworkDisabled: false,
-      ExposedPorts: {},
-      SecurityOpts: [""],
-      HostConfig: {
-        Binds: [],
-        Links: [],
-        LxcConf: {},
-        PortBindings: {},
-        PublishAllPorts: false,
-        Privileged: false,
-        ReadonlyRootfs: false,
-        Dns: [],
-        DnsSearch: [""],
-        ExtraHosts: null,
-        VolumesFrom: [],
-        CapAdd: [],
-        Capdrop: [],
-        RestartPolicy: {"Name": "", "MaximumRetryCount": 0},
-        NetworkMode: "bridge",
-        Devices: []
-      }
-    };
+  details = xtend(defaultDetails, details);
 
-    details = xtend(defaultDetails, details);
+  var opts = {
+    qs: {name: name},
+    body: null,
+    json: true
+  };
 
-    var opts = {
-      qs: {name: name},
-      json: true
-    };
-
-    var req = self.dkr.post('/containers/create', opts, function(err, resp) {
-      if (err) {
-        return reject(err);
-      }
-      resolve(new Container(xtend(resp, details)));
+  return this.dkr
+    .post('/containers/create', opts)
+    .bind(this)
+    .then(function(container) {
+      return new Container(xtend(container, details));
+    })
+    .catch(function(err) {
+      return err;
     });
-
-    req.send(details);
-  });
 };
 
 /**
@@ -142,39 +140,34 @@ Nodoecker.prototype.run = function(details, name) {
  * @returns {container[]} an array of container objects when the promise fulfills
  */
 Nodoecker.prototype.images = function(params) {
-  var self = this;
-  return new Promise(function(resolve, reject) {
-    params = params || {};
+  params = params || {};
 
-    if (params.filters) {
-      params.filters = JSON.stringify(params.filters);
-    }
+  if (params.filters) {
+    params.filters = JSON.stringify(params.filters);
+  }
 
-    var opts = {
-      qs: params
-    };
+  var opts = {
+    qs: params,
+    json: true
+  };
 
-    self.dkr.get('/images/json', opts, function(err, stream) {
-      if (err) {
-        return reject(err);
-      }
+  return this.dkr
+    .get('/images/json', opts)
+    .bind(this)
+    .then(function(images) {
+      var imgOpts = {
+        host: this.host,
+        authStr: this.authStr,
+        delay: true
+      };
 
-      var data = [];
-
-      stream
-        .on('data', function(chunk) {
-          data.push(chunk.toString());
-        })
-        .on('end', function() {
-          var images = JSON.parse(data.join(''));
-          images = images.map(function(container) {
-            return new Image(container, {host: self.host, authStr: self.authStr});
-          });
-
-          resolve(images);
-        });
+      return images.map(function(image) {
+        return this.image(image, imgOpts);
+      });
+    })
+    .catch(function(err) {
+      return err;
     });
-  });
 };
 
 /**
@@ -215,7 +208,7 @@ Nodoecker.prototype.pull = function(imageName, opts) {
 
   if (opts.auth) {
     params.headers = {
-      'X-Registry-Auth': self.authStr || opts.auth
+      'X-Registry-Auth': this.authStr || opts.auth
     };
     delete opts.auth;
   }
@@ -224,7 +217,6 @@ Nodoecker.prototype.pull = function(imageName, opts) {
   var qs = querystring.stringify(opts);
   var imgUrl = '/images/create?' + qs;
 
-  debug('calling docker with', imgUrl, params);
   return this.dkr
     .post(imgUrl, params)
     .bind(this)
@@ -240,31 +232,6 @@ Nodoecker.prototype.pull = function(imageName, opts) {
     .catch(function(err) {
       return err;
     });
-
-  //   self.dkr.post(imgUrl, params, function(err, stream) {
-  //     if (err) {
-  //       debug('Docker returned an error', err);
-  //       return reject(err);
-  //     }
-
-  //     stream
-  //       .on('data', function(d){
-  //         debug(d.toString());
-  //       })
-  //       .on('end', function() {
-  //         debug('Finished pulling image');
-  //         var imgOpts = {
-  //           host: self.host,
-  //           authStr: self.authStr,
-  //           tag: opts.tag
-  //         };
-
-  //         var img = new Image(imageName, imgOpts);
-
-  //         resolve(img);
-  //       });
-  //   });
-  // });
 };
 
 module.exports = Nodoecker;
