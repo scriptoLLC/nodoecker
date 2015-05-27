@@ -2,7 +2,7 @@
 
 var querystring = require('querystring');
 
-var Dr = require('docker-remote-api');
+var docker = require('./docker-remote-api-as-promised');
 var xtend = require('xtend');
 var Promise = require('native-or-bluebird');
 var debug = require('debug')('nodoecker');
@@ -26,7 +26,7 @@ function Nodoecker(host, auth){
   auth = auth || {};
   this.host = host;
   this.auth = auth;
-  this.dkr = new Dr({host: this.host});
+  this.dkr = docker(host);
   this.authStr = this._makeAuth(auth);
 }
 
@@ -208,50 +208,63 @@ Nodoecker.prototype.image = function(name, opts) {
  * @return {Promise} resolve -> image, reject -> err
  */
 Nodoecker.prototype.pull = function(imageName, opts) {
-  var self = this;
   opts = opts || {};
-  return new Promise(function(resolve, reject) {
-    var params = {
-      body: null
+  var params = {
+    body: null
+  };
+
+  if (opts.auth) {
+    params.headers = {
+      'X-Registry-Auth': self.authStr || opts.auth
     };
+    delete opts.auth;
+  }
 
-    if (opts.auth) {
-      params.headers = {
-        'X-Registry-Auth': self.authStr || opts.auth
+  opts.fromImage = imageName;
+  var qs = querystring.stringify(opts);
+  var imgUrl = '/images/create?' + qs;
+
+  debug('calling docker with', imgUrl, params);
+  return this.dkr
+    .post(imgUrl, params)
+    .bind(this)
+    .then(function() {
+      var imgOpts = {
+        host: this.host,
+        authStr: this.authStr,
+        tag: opts.tag
       };
-      delete opts.auth;
-    }
 
-    opts.fromImage = imageName;
-    var qs = querystring.stringify(opts);
-    var imgUrl = '/images/create?' + qs;
-
-    debug('calling docker with', imgUrl, params);
-
-    self.dkr.post(imgUrl, params, function(err, stream) {
-      if (err) {
-        debug('Docker returned an error', err);
-        return reject(err);
-      }
-
-      stream
-        .on('data', function(d){
-          debug(d.toString());
-        })
-        .on('end', function() {
-          debug('Finished pulling image');
-          var imgOpts = {
-            host: self.host,
-            authStr: self.authStr,
-            tag: opts.tag
-          };
-          
-          var img = new Image(imageName, imgOpts);
-
-          resolve(img);
-        });
+      return new Image(imageName, imgOpts);
+    })
+    .catch(function(err) {
+      return err;
     });
-  });
+
+  //   self.dkr.post(imgUrl, params, function(err, stream) {
+  //     if (err) {
+  //       debug('Docker returned an error', err);
+  //       return reject(err);
+  //     }
+
+  //     stream
+  //       .on('data', function(d){
+  //         debug(d.toString());
+  //       })
+  //       .on('end', function() {
+  //         debug('Finished pulling image');
+  //         var imgOpts = {
+  //           host: self.host,
+  //           authStr: self.authStr,
+  //           tag: opts.tag
+  //         };
+
+  //         var img = new Image(imageName, imgOpts);
+
+  //         resolve(img);
+  //       });
+  //   });
+  // });
 };
 
 module.exports = Nodoecker;
