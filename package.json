@@ -1,6 +1,6 @@
 {
   "name": "nodoecker",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "A wrapper around docker-remote-api",
   "main": "index.js",
   "scripts": {
