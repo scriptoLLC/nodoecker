@@ -6,8 +6,7 @@ var draap = require('docker-remote-api-as-promised');
 var xtend = require('xtend');
 var Promise = require('native-or-bluebird');
 
-var Container = require('./container');
-var Image = require('./image');
+var DockerObj = require('./docker-object');
 
 var dockerRegistry = 'https://index.docker.io/v1';
 
@@ -56,7 +55,7 @@ Nodoecker.prototype._makeAuth = function(auth){
  * @param {string} name what to name the container
  * @returns {container} the container will be returned to the promise
  */
-Nodoecker.prototype.run = function(details, name) {
+Nodoecker.prototype.run = function(name, image, details) {
   if (!/^\/?[a-zA-Z0-9_-]+/.test(name)) {
     throw new Error('Name can only consist of characters a-z, A-Z, 0-9, _ and -');
   }
@@ -78,7 +77,7 @@ Nodoecker.prototype.run = function(details, name) {
     Env: null,
     Cmd: [],
     Entrypoint: "",
-    Image: "",
+    Image: image,
     Volumes: {},
     WorkingDir: "",
     NetworkDisabled: false,
@@ -108,15 +107,18 @@ Nodoecker.prototype.run = function(details, name) {
 
   var opts = {
     qs: {name: name},
-    body: null,
-    json: true
+    body: JSON.stringify(details),
+    json: true,
+    headers: {
+      'content-type': 'application/json'
+    }
   };
 
   return this.dkr
     .post('/containers/create', opts)
     .bind(this)
     .then(function(container) {
-      return new Container(xtend(container, details));
+      return new DockerObj(xtend(container, details), 'container');
     })
     .catch(function(err) {
       return err;
@@ -181,7 +183,7 @@ Nodoecker.prototype.image = function(name, opts) {
   opts = opts || {};
   opts.host = this.host;
   opts.authStr = this.authStr;
-  var img = new Image(name, opts);
+  var img = new DockerObj(name, 'image', opts);
   if (opts.delay) {
     return Promise.resolve(img);
   } else {
@@ -227,7 +229,7 @@ Nodoecker.prototype.pull = function(imageName, opts) {
         tag: opts.tag
       };
 
-      return new Image(imageName, imgOpts);
+      return new DockerObj(imageName, 'image', imgOpts);
     })
     .catch(function(err) {
       return err;

@@ -4,10 +4,13 @@ var bs = require('byte-size');
 var draap = require('docker-remote-api-as-promised');
 var debug = require('debug')('nodoecker');
 
-function Image(name, opts) {
+function DockerObj(name, type, opts) {
   if (opts.tag) {
     name = [name, opts.tag].join(':');
   }
+
+  this.type = type || 'image';
+  this._dockerURI = [this.type, 's'].join('');
 
   this.reference = name;
   this.host = opts.host;
@@ -47,7 +50,7 @@ function Image(name, opts) {
 }
 
 Image.prototype.history = function() {
-    var url = '/images/' + this.id + '/history';
+    var url = '/' + this._dockerURI + '/' + this.id + '/history';
     return this.dkr.get(url, {json: true})
       .bind(this)
       .then(function(history) {
@@ -60,8 +63,8 @@ Image.prototype.history = function() {
 };
 
 Image.prototype.Inspect = function() {
-    var imgUrl = '/images/' + this.reference + '/json';
-    debug('Creating new image with', imgUrl);
+    var imgUrl = '/' + this._dockerURI + '/' + this.reference + '/json';
+    debug('Creating new', this._dockerURI, 'with', imgUrl);
     return this.dkr.get(imgUrl, {json: true})
       .bind(this)
       .then(function(info) {
@@ -84,4 +87,4 @@ Image.prototype.Inspect = function() {
       });
 };
 
-module.exports = Image;
+module.exports = DockerObj;
