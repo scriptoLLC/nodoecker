@@ -49,7 +49,7 @@ function DockerObj(name, type, opts) {
   });
 }
 
-Image.prototype.history = function() {
+DockerObj.prototype.history = function() {
     var url = '/' + this._dockerURI + '/' + this.id + '/history';
     return this.dkr.get(url, {json: true})
       .bind(this)
@@ -62,7 +62,7 @@ Image.prototype.history = function() {
       });
 };
 
-Image.prototype.Inspect = function() {
+DockerObj.prototype.Inspect = function() {
     var imgUrl = '/' + this._dockerURI + '/' + this.reference + '/json';
     debug('Creating new', this._dockerURI, 'with', imgUrl);
     return this.dkr.get(imgUrl, {json: true})
