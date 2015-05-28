@@ -10,13 +10,14 @@ function DockerObj(name, type, opts) {
   }
 
   this.type = type || 'image';
-  this._dockerURI = [this.type, 's'].join('');
-
-  this.reference = name;
-  this.host = opts.host;
-  this.authStr = opts.authStr;
-  this.dkr = draap(this.host);
   this.history = [];
+
+  // internal properties we keep from being serialized into the JSON repr
+  this._dockerURI = [this.type, 's'].join('');
+  this._reference = name;
+  this._host = opts.host;
+  this._authStr = opts.authStr;
+  this._dkr = draap(this._host);
   this._size = 0;
   this._virtualSize = 0;
   this._created = new Date();
@@ -51,7 +52,7 @@ function DockerObj(name, type, opts) {
 
 DockerObj.prototype.history = function() {
     var url = '/' + this._dockerURI + '/' + this.id + '/history';
-    return this.dkr.get(url, {json: true})
+    return this._dkr.get(url, {json: true})
       .bind(this)
       .then(function(history) {
         this.history = history;
@@ -63,9 +64,9 @@ DockerObj.prototype.history = function() {
 };
 
 DockerObj.prototype.Inspect = function() {
-    var imgUrl = '/' + this._dockerURI + '/' + this.reference + '/json';
+    var imgUrl = '/' + this._dockerURI + '/' + this._reference + '/json';
     debug('Creating new', this._dockerURI, 'with', imgUrl);
-    return this.dkr.get(imgUrl, {json: true})
+    return this._dkr.get(imgUrl, {json: true})
       .bind(this)
       .then(function(info) {
         debug('Finished getting image');
@@ -85,6 +86,16 @@ DockerObj.prototype.Inspect = function() {
       .catch(function(err) {
         return err;
       });
+};
+
+DockerObj.prototype.toJSON = function() {
+  var ret = {};
+  for (var prop in this) {
+    if (this.hasOwnProperty(prop) && typeof this[prop] !== 'function' && prop[0] !== '_') {
+      ret[prop] = this[prop];
+    }
+  }
+  return ret;
 };
 
 module.exports = DockerObj;
