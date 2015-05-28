@@ -127,6 +127,49 @@ Nodoecker.prototype.run = function(name, image, details) {
 };
 
 /**
+ * Stops a container
+ * @method stop
+ * @param {string} name name or ID of container to stop
+ * @param {integer} time=0 amount of time in ms to delay shutdown
+ * @returns {promise} success -> true
+ */
+Nodoecker.prototype.stop = function(name, time) {
+  time = time || 0;
+  var containerUrl = '/containers/' + name + '/stop?t=' + time;
+
+  return this.dkr
+    .post(containerUrl)
+    .then(function() {
+      return true;
+    })
+    .catch(function(err) {
+      return err;
+    });
+};
+
+/**
+ * Restarts a container
+ * @method restart
+ * @param {string} name name or ID of container to restart
+ * @param {integer} time=0 amount of time to delay shutdown
+ * @returns {promise} success -> `true`
+ */
+Nodoecker.prototype.restart = function(name, time) {
+  time = time || 0;
+  var containerUrl = '/containers/' + name + '/restart?t=' + time;
+
+  return this.dkr
+    .post(containerUrl)
+    .then(function() {
+      return true;
+    })
+    .catch(function(err) {
+      return err;
+    });
+};
+
+
+/**
  * List all images in docker instance
  * @method ps
  * @memberOf Nodoedocker
@@ -189,6 +232,26 @@ Nodoecker.prototype.image = function(name, opts) {
     return Promise.resolve(img);
   } else {
     return img.Inspect();
+  }
+};
+
+/**
+ * Returns an instance of a container
+ * @method container
+ * @param {string} name name of the container you want to create
+ * @param {object} opts options for creating
+ * @param {boolean} [opts.delay] dont' call `container.Inspect()`
+ * @returns {object} Promise -> new container
+ */
+Nodoecker.prototype.container = function(name, opts) {
+  opts = opts || {};
+  opts.host = this.host;
+  opts.authStr = this.authStr;
+  var container = new DockerObj(name, 'container', opts);
+  if (opts.delay) {
+    return Promise.resolve(container);
+  } else {
+    return container.Inspect();
   }
 };
 
