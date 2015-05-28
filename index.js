@@ -56,6 +56,7 @@ Nodoecker.prototype._makeAuth = function(auth){
  * @returns {container} the container will be returned to the promise
  */
 Nodoecker.prototype.run = function(name, image, details) {
+  details = details || {};
   if (!/^\/?[a-zA-Z0-9_-]+/.test(name)) {
     throw new Error('Name can only consist of characters a-z, A-Z, 0-9, _ and -');
   }
