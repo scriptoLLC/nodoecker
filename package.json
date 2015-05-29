@@ -30,5 +30,8 @@
     "docker-remote-api-as-promised": "~1.0.1",
     "native-or-bluebird": "~1.2.0",
     "xtend": "~4.0.0"
+  },
+  "devDependencies": {
+    "tap": "~1.2.0"
   }
 }

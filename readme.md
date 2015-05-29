@@ -1,5 +1,5 @@
 # Nodöcker (nodoecker)
-A node/docker API designed to mimic the UI from the Docker CLI as much as possible.
+A node/docker API designed to mimic the UI from the Docker CLI as much as possible. The Docker REST API doesn't map very clearly, and if you have experience with using the CLI, you're going to be spend a lot of time reading the API docs to figure out how to do the same things. This attempts to fix that.
 
 And yes it uses promises. This was designed to work with [Koa](https://github.com/koajs/koa) so it's promises. But it will use the built-in `Promise` object
 if it exists. And [bluebird](https://npmjs.org/package/bluebird) if not.
@@ -45,12 +45,32 @@ nd
   });
 ```
 
-## Issues!
-It only implements a very small subset of the Docker API current:
+## Implemented API
+It only implements a portion subset of the Docker API current:
 
-* Pulling images [docker pull]
-* Creating containers [docker run]
-* Inspecting containers and images [docker inspect]
+* Pulling images [`docker pull`]
+* Creating containers [`docker run`]
+* Stopping containers [`docker stop`]
+* Restarting containers [`docker restart`]
+* Inspecting containers and images [`docker inspect`]
+* Getting image history [`docker history`]
+* Listing all images available [`docker images`]
+* Listing all running containers [`docker ps`]
+
+Pull-Requests to implement more of the API or to provide better alignment against the CLI versus the exposed parts of the API are very welcome!
+
+## Tests
+
+```
+npm test
+```
+
+It will attempt to talk to Docker via `/var/run/docker.sock`. If your Docker
+daemon is running in a different place you can specify it by setting the `DOCKER_SOCK` environment variable.
+
+```
+DOCKER_SOCK=http://127.0.0.1:9000 npm test
+```
 
 ## Licenese
-Apache 2.0; Copyright 2015 Scripto
+Apache 2.0; Copyright &copy; 2015 Scripto
