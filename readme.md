@@ -1,3 +1,5 @@
+[![Circle CI](https://circleci.com/gh/scriptoLLC/nodoecker.svg?style=svg)](https://circleci.com/gh/scriptoLLC/nodoecker)
+
 # Nodöcker (nodoecker)
 A node/docker API designed to mimic the UI from the Docker CLI as much as possible. The Docker REST API doesn't map very clearly, and if you have experience with using the CLI, you're going to be spend a lot of time reading the API docs to figure out how to do the same things. This attempts to fix that.
 
