@@ -4,6 +4,7 @@ var test = require('tap').test;
 var ND = require('./');
 
 var nd = new ND(process.env.DOCKER_SOCK || '/var/run/docker.sock');
+var redisContainer = 'myRedis' + (new Date()).getTime();
 
 test('pulling an image', function(t) {
   t.plan(3);
@@ -38,8 +39,8 @@ test('inspecting an image', function(t) {
   nd
     .image('hello-world')
     .then(function(img) {
-      t.equal(img.architecture, 'amd64', 'arch');
-      t.equal(img.virtualSize, '910 B', 'virtual size');
+      t.equal(img.Architecture, 'amd64', 'arch');
+      t.equal(img.VirtualSize, '910 B', 'virtual size');
     })
     .catch(function(err) {
       t.notOk(!!err, err.message);
@@ -61,3 +62,17 @@ test('image inspection & history', function(t) {
     });
 });
 
+test('runs & inspects a container', function(t) {
+  t.plan(1);
+  nd
+    .pull('redis')
+    .then(function() {
+      return nd.run(redisContainer, 'redis');
+    })
+    .then(function(myRedis) {
+      t.equal(myRedis.type, 'container');
+    })
+    .catch(function(err) {
+      t.notOk(!!err, err.message);
+    });
+});

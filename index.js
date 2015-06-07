@@ -1,13 +1,9 @@
 'use strict';
 
-var querystring = require('querystring');
-
 var draap = require('docker-remote-api-as-promised');
-var xtend = require('xtend');
 var Promise = require('native-or-bluebird');
 
-var DockerObj = require('./docker-object');
-
+var DockerObj = require('./lib/docker-object');
 var dockerRegistry = 'https://index.docker.io/v1';
 
 /**
@@ -48,129 +44,95 @@ Nodoecker.prototype._makeAuth = function(auth){
 };
 
 /**
- * Create a new container on the docker server
+ * A convience method that takes a containerName, an image and optional details
+ * about the container to create and returns a running container
  * @method run
- * @promise
- * @memberOf Nodoedocker
- * @param {object} details details about the container to launch. Details: https://docs.docker.com/reference/api/docker_remote_api_v1.17/#create-a-container
- * @param {string} name what to name the container
- * @returns {container} the container will be returned to the promise
+ * @param {string} containerName what to call your new container
+ * @param {string|object} image either a string identifying the image, or an instance of the image object
+ * @param {object} details [Container creation details](https://docs.docker.com/reference/api/docker_remote_api_v1.17/#create-a-container)
+ * @returns {Promise} resolves to a container object representing the running container
  */
-Nodoecker.prototype.run = function(name, image, details) {
-  details = details || {};
-  if (!/^\/?[a-zA-Z0-9_-]+/.test(name)) {
-    throw new Error('Name can only consist of characters a-z, A-Z, 0-9, _ and -');
+Nodoecker.prototype.run = function(containerName, image, details) {
+  if (typeof image === 'string') {
+    image = this.image(image, {delay: true});
   }
 
-  var defaultDetails = {
-    Hostname: "",
-    Domainname: "",
-    User: "",
-    Memory: 0,
-    MemorySwap: 0,
-    CpuShares: 512,
-    Cpuset: "0,1",
-    AttachStdin: true,
-    AttachStdout: true,
-    AttachStderr: true,
-    Tty: false,
-    OpenStdin: false,
-    StdinOnce: false,
-    Env: null,
-    Cmd: [],
-    Entrypoint: "",
-    Image: image,
-    Volumes: {},
-    WorkingDir: "",
-    NetworkDisabled: false,
-    ExposedPorts: {},
-    SecurityOpts: [""],
-    HostConfig: {
-      Binds: [],
-      Links: [],
-      LxcConf: {},
-      PortBindings: {},
-      PublishAllPorts: false,
-      Privileged: false,
-      ReadonlyRootfs: false,
-      Dns: [],
-      DnsSearch: [""],
-      ExtraHosts: null,
-      VolumesFrom: [],
-      CapAdd: [],
-      Capdrop: [],
-      RestartPolicy: {"Name": "", "MaximumRetryCount": 0},
-      NetworkMode: "bridge",
-      Devices: []
-    }
-  };
-
-  details = xtend(defaultDetails, details);
-
-  var opts = {
-    qs: {name: name},
-    body: JSON.stringify(details),
-    json: true,
-    headers: {
-      'content-type': 'application/json'
-    }
-  };
-
-  return this.dkr
-    .post('/containers/create', opts)
-    .bind(this)
-    .then(function(container) {
-      return new DockerObj(xtend(container, details), 'container');
-    })
-    .catch(function(err) {
-      return err;
-    });
+  return image.run(containerName, details);
 };
 
 /**
- * Stops a container
+ * Stop a running container
  * @method stop
- * @promise
- * @memberOf Nodoedocker
- * @param {string} name name or ID of container to stop
- * @param {integer} time=0 amount of time in ms to delay shutdown
- * @returns {promise} success -> true
+ * @param {string|object} container Either a string identifying the container or a container instance
+ * @param {number} time The amount of time you want to delay the action
+ * @returns {Promise} resolves to `true` on success
  */
-Nodoecker.prototype.stop = function(name, time) {
-  time = time || 0;
-  var containerUrl = '/containers/' + name + '/stop?t=' + time;
-
-  return this.dkr
-    .post(containerUrl)
-    .then(function() {
-      return true;
-    })
-    .catch(function(err) {
-      return err;
-    });
+Nodoecker.prototype.stop = function(container, time) {
+  return this._runState('stop', container, time);
 };
 
 /**
- * Restarts a container
+ * Restart a running container
  * @method restart
- * @promise
- * @memberOf Nodoedocker
- * @param {string} name name or ID of container to restart
- * @param {integer} time=0 amount of time to delay shutdown
- * @returns {promise} success -> `true`
+ * @param {string|object} container Either a string identifying the container or a container instance
+ * @param {number} time The amount of time you want to delay the action
+ * @returns {Promise} resolves to `true` on success
  */
-Nodoecker.prototype.restart = function(name, time) {
-  time = time || 0;
-  var containerUrl = '/containers/' + name + '/restart?t=' + time;
+Nodoecker.prototype.restart = function(container, time) {
+  return this._runState('restart', container, time);
+};
 
-  return this.dkr
-    .post(containerUrl)
-    .then(function() {
-      return true;
-    })
-    .catch(function(err) {
-      return err;
-    });
+/**
+ * Starts a running container
+ * @method start
+ * @param {string|object} container Either a string identifying the container or a container instance
+ * @param {number} time The amount of time you want to delay the action
+ * @returns {Promise} resolves to `true` on success
+ */
+Nodoecker.prototype.start = function(container, time) {
+  return this._runState('start', container, time);
+};
+
+/**
+ * Actually perform the run state action on the container
+ * @method _runState
+ * @private
+ * @memberOf Nodoecker
+ * @param {string} method start|stop|restart
+ * @param {string|object} container Either a string identifying the container or a container instance
+ * @param {number} time The amount of time you want to delay the action
+ * @returns {Promise} resolves to `true` on success
+ */
+Nodoecker.prototype._runState = function(method, container, time) {
+  if (typeof container === 'string') {
+    container = this.container(container, {delay: true});
+  }
+
+  if (!(container instanceof DockerObj)) {
+    throw new Error('Container should either be a string or a container instance');
+  }
+
+  return container[method].call(container, time);
+};
+
+/**
+ * Create a new image object and pull it from the remote docker registry
+ * @method pull
+ * @param {string} image identifying text for image
+ * @param {object} opts options for pulling the image
+ * @returns {Promise} resolves to a new Image object
+ */
+Nodoecker.prototype.pull = function(image, opts) {
+  if (typeof image === 'string') {
+    opts.delay = true;
+    image = this.image(image, opts);
+  }
+
+  if (!(image instanceof DockerObj)) {
+    throw new Error('image must either be a string or an image instance');
+  }
+
+  image.pull(opts);
 };
 
 /**
@@ -218,7 +180,7 @@ Nodoecker.prototype._list = function(type, params) {
       });
     })
     .catch(function(err) {
-      return err;
+      throw err;
     });
 };
 
@@ -265,58 +227,6 @@ Nodoecker.prototype.container = function(name, opts) {
   }
 };
 
-/**
- * Pulls an image from the registry
- * @promise
- * @memberOf Nodoedocker
- * @param {string} imageName name of
- * @param {object} opts      parameters for request
- * @param {string} [opts.fromSrc]   URL to the source to import
- * @param {string} [opts.repo] repository to pull from
- * @param {string} [opts.tag] what tag to pull
- * @param {string} [opts.registry] which registry to use
- * @param {boolean|string} [opts.auth] should we end the auth string. defaults to the auth string created when instantiating the client, otherwise one can be provided here
- * @return {Promise} resolve -> image, reject -> err
- */
-Nodoecker.prototype.pull = function(imageName, opts) {
-  opts = opts || {};
-  var params = {
-    body: null
-  };
-
-  if (/:/.test(imageName)) {
-    imageName = imageName.split(':');
-    opts.tag = imageName[1];
-    imageName = imageName[0];
-  }
-
-  if (opts.auth) {
-    params.headers = {
-      'X-Registry-Auth': this.authStr || opts.auth
-    };
-    delete opts.auth;
-  }
-
-  opts.fromImage = imageName;
-  var qs = querystring.stringify(opts);
-  var imgUrl = '/images/create?' + qs;
-
-  return this.dkr
-    .post(imgUrl, params)
-    .bind(this)
-    .then(function() {
-      var imgOpts = {
-        host: this.host,
-        authStr: this.authStr,
-        tag: opts.tag
-      };
-
-      return new DockerObj(imageName, 'image', imgOpts);
-    })
-    .catch(function(err) {
-      return err;
-    });
-};
 
 /**
  * Return a list of all the running containers on a docker dameon

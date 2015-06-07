@@ -4,7 +4,7 @@
   "description": "A wrapper around docker-remote-api",
   "main": "index.js",
   "scripts": {
-    "test": "tap test.js"
+    "test": "TAP_TIMEOUT=240 tap test.js"
   },
   "repository": {
     "type": "git",
@@ -27,7 +27,7 @@
     "bluebird": "~2.9.25",
     "byte-size": "~0.1.0",
     "debug": "~2.2.0",
-    "docker-remote-api-as-promised": "~1.0.1",
+    "docker-remote-api-as-promised": "~2.0.0",
     "native-or-bluebird": "~1.2.0",
     "xtend": "~4.0.0"
   },
